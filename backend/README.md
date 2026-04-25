@@ -36,3 +36,11 @@ FastAPI backend for venue emergency coordination with Firestore persistence, Gem
   "timestamp": "2026-04-26T10:45:00Z"
 }
 ```
+
+# kill ngrok
+
+Terminal: pkill -f "ngrok http 8000"
+
+```bash
+
+```
