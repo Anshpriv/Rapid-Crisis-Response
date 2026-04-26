@@ -120,6 +120,39 @@ class GeminiService:
             return fallback
 
     @staticmethod
+    def _fallback_escalation_message(incident: dict) -> str:
+        alert_type = str(incident.get("type", "distress")).upper()
+        room = incident.get("room", "unknown room")
+        return (
+            f"ESCALATION: A {alert_type} alert in Room {room} has been unacknowledged "
+            "for 90 seconds. No staff member has responded. Immediate manager intervention "
+            "is required. Verify responder availability and take direct control of the situation."
+        )
+
+    def generate_escalation_message(self, incident: dict) -> str:
+        fallback = self._fallback_escalation_message(incident)
+        if not self.enabled or self._model is None:
+            return fallback
+
+        prompt = (
+            "You are an emergency operations system. A hospitality emergency alert "
+            "has gone unacknowledged for 90 seconds. Write a single urgent escalation "
+            "message (2-3 sentences, plain text, no JSON, no markdown) to send to the "
+            "duty manager. Be direct and action-oriented.\n"
+            f"Alert type: {incident.get('type')}\n"
+            f"Room: {incident.get('room')}\n"
+            f"Device: {incident.get('device_name')}\n"
+            f"Time of alert: {incident.get('timestamp')}"
+        )
+
+        try:
+            response = self._model.generate_content(prompt)
+            text = (getattr(response, "text", "") or "").strip()
+            return text if text else fallback
+        except Exception:
+            return fallback
+
+    @staticmethod
     def _fallback_risk_insights(incidents: list[dict[str, Any]]) -> dict[str, Any]:
         counts = Counter(str(item.get("type", "unknown")) for item in incidents)
         ordered = counts.most_common()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 import socketio
@@ -7,11 +8,14 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.models import AlertCreateRequest, AlertStatus, AlertUpdateRequest
+from app.models import AlertCreateRequest, AlertStatus, AlertUpdateRequest, RegisterDeviceRequest
+from app.services.fcm_service import send_notification
 from app.services.firestore_service import (
+    _get_db,
     create_incident,
     get_recent_incidents,
     list_incidents,
+    register_device,
     update_incident,
 )
 from app.services.gemini_service import gemini_service
@@ -48,6 +52,102 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@api.post("/api/register-device")
+async def register_device_route(payload: RegisterDeviceRequest):
+    try:
+        saved = register_device(payload.role, payload.fcm_token)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return saved
+
+
+async def notify_staff_for_incident(incident: dict) -> None:
+    alert_type = incident.get("type")
+    role_map = {
+        "medical": ["medical", "manager"],
+        "fire": ["security", "manager"],
+        "security": ["security", "manager"],
+        "distress": ["general", "manager"],
+    }
+    target_roles = role_map.get(alert_type, ["manager"])
+
+    try:
+        db = _get_db()
+        devices_ref = db.collection("staff_devices").stream()
+        title = f"EMERGENCY: {alert_type.upper()} at Room {incident.get('room')}"
+        brief = incident.get("gemini_brief")
+        body = (brief.get("summary") if isinstance(brief, dict) else brief) or "Immediate response required."
+
+        for doc in devices_ref:
+            device = doc.to_dict()
+            if device.get("role") in target_roles:
+                await send_notification(device["fcm_token"], title, body)
+    except Exception as exc:
+        print(f"Notify staff error: {exc}")
+
+
+async def escalation_timer(incident_id: str, db) -> None:
+    print(f"[ESCALATION] Timer started for incident {incident_id}", flush=True)
+    await asyncio.sleep(90)
+
+    print(
+        f"[ESCALATION] Timer fired for incident {incident_id}, checking status...",
+        flush=True,
+    )
+
+    try:
+        doc = db.collection("incidents").document(incident_id).get()
+        if not doc.exists:
+            return
+
+        incident = doc.to_dict()
+        if incident.get("status") != "active":
+            return
+
+        print(
+            f"[ESCALATION] Status is {incident.get('status')}, proceeding to notify...",
+            flush=True,
+        )
+        escalation_message = gemini_service.generate_escalation_message(incident)
+
+        devices_ref = db.collection("staff_devices").stream()
+        devices = list(devices_ref)
+        print(
+            f"[ESCALATION] Found {len(devices)} devices in staff_devices",
+            flush=True,
+        )
+        title = f"ESCALATION: Unacknowledged {incident.get('type','').upper()} at Room {incident.get('room')}"
+        body = escalation_message or "Alert unacknowledged for 90 seconds. Immediate manager action required."
+
+        for doc in devices:
+            print(
+                f"[ESCALATION] Checking device role: {doc.to_dict().get('role')}",
+                flush=True,
+            )
+            device = doc.to_dict()
+            if device.get("role") == "manager":
+                print("[ESCALATION] Generating escalation message...", flush=True)
+                try:
+                    escalation_message = gemini_service.generate_escalation_message(incident)
+                    print(
+                        f"[ESCALATION] Message generated: {escalation_message[:60]}",
+                        flush=True,
+                    )
+                    title = f"ESCALATION: Unacknowledged {incident.get('type','').upper()} at Room {incident.get('room')}"
+                    body = escalation_message or "Alert unacknowledged for 90 seconds."
+                    print(
+                        f"[ESCALATION] Sending FCM to {device['fcm_token'][:20]}...",
+                        flush=True,
+                    )
+                    await send_notification(device["fcm_token"], title, body)
+                    print("[ESCALATION] FCM call completed", flush=True)
+                except Exception as e:
+                    print(f"[ESCALATION] Error in loop: {e}", flush=True)
+
+    except Exception as exc:
+        print(f"Escalation error: {exc}")
+
+
 @api.post("/api/alert")
 async def create_alert(payload: AlertCreateRequest):
     room = payload.room.strip()
@@ -76,6 +176,8 @@ async def create_alert(payload: AlertCreateRequest):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     await sio.emit("new_alert", final_incident)
+    asyncio.create_task(notify_staff_for_incident(final_incident))
+    asyncio.create_task(escalation_timer(final_incident["id"], _get_db()))
     return final_incident
 
 

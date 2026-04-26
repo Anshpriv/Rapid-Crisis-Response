@@ -116,3 +116,15 @@ def get_recent_incidents(days: int = 30, limit: int = 500) -> list[dict[str, Any
         return [_serialize_snapshot(snapshot) for snapshot in snapshots]
     except Exception as exc:  # pragma: no cover - external dependency
         raise RuntimeError("Failed to load recent incidents from Firestore.") from exc
+
+
+def register_device(role: str, fcm_token: str) -> dict:
+    db = _get_db()
+    doc_ref = db.collection("staff_devices").document()
+    data = {
+        "role": role,
+        "fcm_token": fcm_token,
+        "registered_at": datetime.now(timezone.utc).isoformat(),
+    }
+    doc_ref.set(data)
+    return {"id": doc_ref.id, **data}

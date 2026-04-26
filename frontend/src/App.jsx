@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AlertCard from "./components/AlertCard";
 import RiskInsightsPanel from "./components/RiskInsightsPanel";
 import StatsBar from "./components/StatsBar";
+import { useAuth } from "./context/AuthContext";
 import { acknowledgeAlert, fetchAlerts, fetchRiskInsights } from "./lib/api";
 import { socket } from "./lib/socket";
+import LoginPage from "./pages/LoginPage";
 import "./App.css";
 
 const TABS = [
@@ -11,6 +13,13 @@ const TABS = [
   { key: "log", label: "Incident Log" },
   { key: "insights", label: "Risk Insights" },
 ];
+
+const ROLE_ALERT_TYPES = {
+  manager: null,
+  medical: new Set(["medical"]),
+  security: new Set(["security", "fire"]),
+  general: new Set(["distress"]),
+};
 
 function normalizeAlert(raw) {
   return {
@@ -69,7 +78,28 @@ function briefSummary(brief) {
   return brief.summary || "Pending Gemini brief...";
 }
 
+function normalizeRole(role) {
+  const normalized = typeof role === "string" ? role.toLowerCase() : "";
+
+  if (normalized && Object.hasOwn(ROLE_ALERT_TYPES, normalized)) {
+    return normalized;
+  }
+
+  return "general";
+}
+
+function filterAlertsByRole(alerts, role) {
+  const allowedTypes = ROLE_ALERT_TYPES[normalizeRole(role)];
+  if (allowedTypes === null) {
+    return alerts;
+  }
+
+  return alerts.filter((alert) => allowedTypes.has(alert.type));
+}
+
 function App() {
+  const { user, role } = useAuth();
+
   const [alerts, setAlerts] = useState([]);
   const [activeTab, setActiveTab] = useState("active");
   const [staffName, setStaffName] = useState("Control Desk");
@@ -100,10 +130,18 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!user) {
+      return;
+    }
+
     loadAlerts();
-  }, [loadAlerts]);
+  }, [loadAlerts, user]);
 
   useEffect(() => {
+    if (!user) {
+      return;
+    }
+
     socket.connect();
 
     const handleNewAlert = (incoming) => {
@@ -122,7 +160,7 @@ function App() {
       socket.off("alert_updated", handleAlertUpdated);
       socket.disconnect();
     };
-  }, []);
+  }, [user]);
 
   const handleAcknowledge = useCallback(
     async (alertId) => {
@@ -174,15 +212,20 @@ function App() {
     }
   }, []);
 
+  const visibleAlerts = useMemo(
+    () => filterAlertsByRole(alerts, role),
+    [alerts, role],
+  );
+
   const activeAlerts = useMemo(
-    () => alerts.filter((alert) => alert.status !== "resolved"),
-    [alerts],
+    () => visibleAlerts.filter((alert) => alert.status !== "resolved"),
+    [visibleAlerts],
   );
 
   const stats = useMemo(() => {
     const now = new Date();
 
-    const todayCount = alerts.filter((alert) => {
+    const todayCount = visibleAlerts.filter((alert) => {
       const parsed = new Date(alert.timestamp || "");
       return (
         !Number.isNaN(parsed.getTime()) &&
@@ -191,14 +234,18 @@ function App() {
     }).length;
 
     return {
-      total: alerts.length,
-      active: alerts.filter((alert) => alert.status === "active").length,
-      responding: alerts.filter((alert) => alert.status === "responding")
+      total: visibleAlerts.length,
+      active: visibleAlerts.filter((alert) => alert.status === "active").length,
+      responding: visibleAlerts.filter((alert) => alert.status === "responding")
         .length,
-      resolved: alerts.filter((alert) => alert.status === "resolved").length,
+      resolved: visibleAlerts.filter((alert) => alert.status === "resolved").length,
       today: todayCount,
     };
-  }, [alerts]);
+  }, [visibleAlerts]);
+
+  if (!user) {
+    return <LoginPage />;
+  }
 
   return (
     <div className="app-shell">
@@ -210,6 +257,7 @@ function App() {
             Live panic-button incidents with Gemini-generated briefs and
             coordinated response updates.
           </p>
+          <p className="hero-subtext">Signed in role: {normalizeRole(role)}</p>
         </div>
 
         <aside className="staff-tools">
@@ -272,11 +320,11 @@ function App() {
 
         {activeTab === "log" && (
           <section>
-            {alerts.length === 0 && !loadingAlerts && (
+            {visibleAlerts.length === 0 && !loadingAlerts && (
               <p className="empty-state">Incident log is empty.</p>
             )}
 
-            {alerts.length > 0 && (
+            {visibleAlerts.length > 0 && (
               <div className="log-table-wrap">
                 <table className="incident-log">
                   <thead>
@@ -291,7 +339,7 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {alerts.map((alert) => (
+                    {visibleAlerts.map((alert) => (
                       <tr key={alert.id}>
                         <td>{formatLogTime(alert.timestamp)}</td>
                         <td>

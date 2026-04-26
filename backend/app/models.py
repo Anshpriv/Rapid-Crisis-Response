@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -31,3 +31,8 @@ class AlertUpdateRequest(BaseModel):
     status: Optional[AlertStatus] = None
     acknowledged_by: Optional[str] = Field(default=None, max_length=120)
     acknowledged_at: Optional[datetime] = None
+
+
+class RegisterDeviceRequest(BaseModel):
+    role: Literal["medical", "security", "manager", "general"]
+    fcm_token: str
