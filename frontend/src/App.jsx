@@ -98,7 +98,7 @@ function filterAlertsByRole(alerts, role) {
 }
 
 function App() {
-  const { user, role } = useAuth();
+  const { user, role, logout } = useAuth();
 
   const [alerts, setAlerts] = useState([]);
   const [activeTab, setActiveTab] = useState("active");
@@ -238,7 +238,8 @@ function App() {
       active: visibleAlerts.filter((alert) => alert.status === "active").length,
       responding: visibleAlerts.filter((alert) => alert.status === "responding")
         .length,
-      resolved: visibleAlerts.filter((alert) => alert.status === "resolved").length,
+      resolved: visibleAlerts.filter((alert) => alert.status === "resolved")
+        .length,
       today: todayCount,
     };
   }, [visibleAlerts]);
@@ -272,6 +273,9 @@ function App() {
           />
           <button type="button" className="ghost-btn" onClick={loadAlerts}>
             Refresh Feed
+          </button>
+          <button type="button" className="ghost-btn" onClick={logout}>
+            Sign Out
           </button>
         </aside>
       </header>
