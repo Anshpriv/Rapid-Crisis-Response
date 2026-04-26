@@ -80,8 +80,11 @@ export default function LoginPage() {
 
     try {
       const credential = await signInWithEmailAndPassword(auth, email, password)
-      const tokenResult = await credential.user.getIdTokenResult()
-      const role = tokenResult.claims.role || 'general'
+      const { getFirestore, doc, getDoc } = await import('firebase/firestore')
+      const { default: app } = await import('../firebase')
+      const db = getFirestore(app)
+      const userDoc = await getDoc(doc(db, 'users', credential.user.uid))
+      const role = userDoc.exists() ? userDoc.data().role || 'general' : 'general'
 
       try {
         const permission = await Notification.requestPermission()

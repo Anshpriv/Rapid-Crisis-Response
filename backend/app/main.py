@@ -75,7 +75,8 @@ async def notify_staff_for_incident(incident: dict) -> None:
         db = _get_db()
         devices_ref = db.collection("staff_devices").stream()
         title = f"EMERGENCY: {alert_type.upper()} at Room {incident.get('room')}"
-        body = incident.get("gemini_brief") or "Immediate response required."
+        brief = incident.get("gemini_brief")
+        body = (brief.get("summary") if isinstance(brief, dict) else brief) or "Immediate response required."
 
         for doc in devices_ref:
             device = doc.to_dict()
@@ -86,7 +87,13 @@ async def notify_staff_for_incident(incident: dict) -> None:
 
 
 async def escalation_timer(incident_id: str, db) -> None:
+    print(f"[ESCALATION] Timer started for incident {incident_id}", flush=True)
     await asyncio.sleep(90)
+
+    print(
+        f"[ESCALATION] Timer fired for incident {incident_id}, checking status...",
+        flush=True,
+    )
 
     try:
         doc = db.collection("incidents").document(incident_id).get()
@@ -97,16 +104,45 @@ async def escalation_timer(incident_id: str, db) -> None:
         if incident.get("status") != "active":
             return
 
+        print(
+            f"[ESCALATION] Status is {incident.get('status')}, proceeding to notify...",
+            flush=True,
+        )
         escalation_message = gemini_service.generate_escalation_message(incident)
 
         devices_ref = db.collection("staff_devices").stream()
+        devices = list(devices_ref)
+        print(
+            f"[ESCALATION] Found {len(devices)} devices in staff_devices",
+            flush=True,
+        )
         title = f"ESCALATION: Unacknowledged {incident.get('type','').upper()} at Room {incident.get('room')}"
         body = escalation_message or "Alert unacknowledged for 90 seconds. Immediate manager action required."
 
-        for doc in devices_ref:
+        for doc in devices:
+            print(
+                f"[ESCALATION] Checking device role: {doc.to_dict().get('role')}",
+                flush=True,
+            )
             device = doc.to_dict()
             if device.get("role") == "manager":
-                await send_notification(device["fcm_token"], title, body)
+                print("[ESCALATION] Generating escalation message...", flush=True)
+                try:
+                    escalation_message = gemini_service.generate_escalation_message(incident)
+                    print(
+                        f"[ESCALATION] Message generated: {escalation_message[:60]}",
+                        flush=True,
+                    )
+                    title = f"ESCALATION: Unacknowledged {incident.get('type','').upper()} at Room {incident.get('room')}"
+                    body = escalation_message or "Alert unacknowledged for 90 seconds."
+                    print(
+                        f"[ESCALATION] Sending FCM to {device['fcm_token'][:20]}...",
+                        flush=True,
+                    )
+                    await send_notification(device["fcm_token"], title, body)
+                    print("[ESCALATION] FCM call completed", flush=True)
+                except Exception as e:
+                    print(f"[ESCALATION] Error in loop: {e}", flush=True)
 
     except Exception as exc:
         print(f"Escalation error: {exc}")

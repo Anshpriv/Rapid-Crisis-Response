@@ -1,17 +1,45 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
 import { getFirestore, doc, getDoc } from 'firebase/firestore'
-import { auth } from '../firebase'
+import { getToken } from 'firebase/messaging'
+import { auth, messaging } from '../firebase'
+import { api } from '../api'
 import app from '../firebase'
 
 export const AuthContext = createContext(null)
 
 const db = getFirestore(app)
+const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(undefined)
   const [role, setRole] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user) {
+      return
+    }
+
+    if (Notification.permission !== 'granted' || !VAPID_KEY) {
+      return
+    }
+
+    const registerToken = async () => {
+      try {
+        const fcmToken = await getToken(messaging, { vapidKey: VAPID_KEY })
+        const rolePayload = role || 'general'
+        await api.post('/api/register-device', {
+          role: rolePayload,
+          fcm_token: fcmToken,
+        })
+      } catch (error) {
+        console.warn('FCM registration skipped:', error)
+      }
+    }
+
+    registerToken()
+  }, [role, user])
 
   useEffect(() => {
     let unsubscribe = () => {}
