@@ -21,7 +21,7 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    if (Notification.permission !== "granted" || !VAPID_KEY) {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted" || !VAPID_KEY) {
       return;
     }
 
