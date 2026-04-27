@@ -4,7 +4,7 @@ Real-time emergency coordination platform for hospitality venues.
 
 ## Architecture
 <p align="center">
-  <img src="./architecturediagram.png" alt="Architecture Diagram"/>
+  <img src="./assets/architecturediagram.png" alt="Architecture Diagram"/>
 </p>
 
 ## How It Works
