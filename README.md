@@ -3,12 +3,33 @@
 Real-time emergency coordination platform for hospitality venues.
 
 ## Architecture
-
-- **Backend:** FastAPI + Firestore (Firebase Admin SDK) + Socket.IO + Gemini
-- **Frontend:** React (Vite) + Axios + Socket.IO client
 <p align="center">
   <img src="./architecturediagram.png" alt="Architecture Diagram"/>
 </p>
+
+## How It Works
+
+A single button press triggers the entire pipeline in under 3 seconds — from emergency detection to AI-generated briefing, dynamic task allocation, and live staff coordination.
+
+1. **Alert Triggered** — Staff or guest presses the IoT panic button (Medical / Fire / Security / Distress). A structured payload is instantly sent to the backend.
+2. **Incident Logged** — The alert is validated and stored in Firestore with full context (type, room, device, timestamp).
+3. **Gemini AI Activates** — Gemini analyses the incident and generates a 2-3 sentence situation brief + a dynamic action checklist tailored to the emergency type.
+4. **Smart Task Allocation** — Based on available staff in the area, tasks from the checklist are dynamically assigned so every action has an owner and nothing falls through.
+5. **Staff Notified Instantly** — FCM push notifications are fired to the right roles. The live dashboard updates in real time via Socket.IO.
+6. **Acknowledge & Resolve** — Staff acknowledge and update status (Responding → Resolved) visible across all open dashboards simultaneously.
+7. **Auto-Escalation** — If unacknowledged after 90 seconds, Gemini generates a contextual escalation message and alerts the manager.
+8. **Risk Insights** — Every incident is logged. Vertex AI analyses 30 days of history to surface patterns and generate actionable risk reports.
+
+## Tech Stack
+| Layer | Technology |
+|-------|-----------|
+| Backend | FastAPI + Socket.IO |
+| Database | Google Firestore |
+| AI — Brief, Checklist & Task Allocation | Google Gemini API |
+| AI — Analytics | Vertex AI |
+| Notifications | Firebase Cloud Messaging |
+| Frontend | React (Vite) + Axios |
+| IoT Device | Custom 4-button panel (BLE + LoRaWAN) |
 
 ## Implemented Scope
 
