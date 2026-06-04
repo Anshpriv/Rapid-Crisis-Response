@@ -38,6 +38,8 @@ const ROLE_ALERT_TYPES = {
   general: new Set(["distress"]),
 };
 
+const ALERT_ENTER_ANIMATION_MS = 520;
+
 function normalizeAlert(raw) {
   return {
     ...raw,
@@ -123,6 +125,7 @@ function App() {
   const [loadingAlerts, setLoadingAlerts] = useState(true);
   const [alertsError, setAlertsError] = useState("");
   const [pendingAckIds, setPendingAckIds] = useState(new Set());
+  const [enteringAlertIds, setEnteringAlertIds] = useState(new Set());
 
   const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
@@ -164,7 +167,27 @@ function App() {
     socket.connect();
 
     const handleNewAlert = (incoming) => {
-      setAlerts((current) => upsertAlert(current, normalizeAlert(incoming)));
+      const normalized = normalizeAlert(incoming);
+
+      setAlerts((current) => upsertAlert(current, normalized));
+
+      if (!normalized.id) {
+        return;
+      }
+
+      setEnteringAlertIds((current) => {
+        const next = new Set(current);
+        next.add(normalized.id);
+        return next;
+      });
+
+      window.setTimeout(() => {
+        setEnteringAlertIds((current) => {
+          const next = new Set(current);
+          next.delete(normalized.id);
+          return next;
+        });
+      }, ALERT_ENTER_ANIMATION_MS);
     };
 
     const handleAlertUpdated = (incoming) => {
@@ -403,6 +426,7 @@ function App() {
                     alert={alert}
                     onAcknowledge={handleAcknowledge}
                     isAcknowledgePending={pendingAckIds.has(alert.id)}
+                    isEntering={enteringAlertIds.has(alert.id)}
                   />
                 ))}
               </div>

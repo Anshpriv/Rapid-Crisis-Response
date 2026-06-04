@@ -53,8 +53,9 @@ export default function LoginPage() {
         .login-page-container {
           display: flex;
           min-height: 100vh;
-          font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-          background-color: #0c0c0c;
+          font-family: "Space Grotesk", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          background-color: var(--bg-main);
+          color: var(--text-main);
         }
         
         .left-panel {
@@ -65,19 +66,17 @@ export default function LoginPage() {
           .left-panel {
             display: flex;
             flex: 1;
-            margin: 28px;
-            border-radius: 20px;
-            background: 
-              radial-gradient(circle at 10% 10%, #4facfe 0%, transparent 40%),
-              radial-gradient(circle at 90% 90%, #00f2fe 0%, transparent 45%),
-              radial-gradient(circle at 50% 50%, #90e0ef 0%, transparent 60%),
-              #bcedf6;
+            margin: 28px 0 28px 28px;
+            border-radius: 8px;
+            background: #ffffff;
+            border: 1px solid #a2a4a5;
             position: relative;
             flex-direction: column;
             justify-content: space-between;
-            padding: 40px;
+            padding: 40px 42px;
             box-sizing: border-box;
             overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
           }
         }
 
@@ -87,27 +86,28 @@ export default function LoginPage() {
           left: 0;
           right: 0;
           bottom: 0;
-          background-image: radial-gradient(#000000 1.5px, transparent 1.5px);
-          background-size: 12px 12px;
-          opacity: 0.04;
-          mix-blend-mode: color-burn;
+          background-image: linear-gradient(#e2e8f0 1px, transparent 1px), linear-gradient(90deg, #e2e8f0 1px, transparent 1px);
+          background-size: 36px 36px;
+          opacity: 0.34;
+          pointer-events: none;
         }
 
         .brand-logo {
           display: flex;
           align-items: center;
           gap: 12px;
-          font-size: 1.25rem;
-          font-weight: 700;
-          color: #111;
+          font-size: 1.15rem;
+          font-weight: 800;
+          color: var(--text-main);
           z-index: 1;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
         }
 
         .brand-icon {
-          width: 34px;
-          height: 34px;
-          background-color: #111;
-          border-radius: 8px;
+          width: 32px;
+          height: 32px;
+          color: var(--red-main);
           display: grid;
           place-items: center;
         }
@@ -119,25 +119,22 @@ export default function LoginPage() {
         }
 
         .brand-icon-inner div {
-          width: 6px;
-          height: 6px;
-          background-color: #fff;
-          border-radius: 1.5px;
-        }
-        
-        /* Make bottom right square slightly different to match the abstract logo style */
-        .brand-icon-inner div:nth-child(4) {
-          opacity: 0.5;
+          display: none;
         }
 
         .left-text {
-          font-size: 3.5rem;
-          font-weight: 700;
-          line-height: 1.1;
-          color: #111;
-          max-width: 80%;
+          font-size: clamp(2.8rem, 5vw, 4.8rem);
+          font-weight: 800;
+          line-height: 0.98;
+          color: var(--text-main);
+          max-width: 86%;
           z-index: 1;
-          letter-spacing: -0.03em;
+          letter-spacing: 0;
+          text-transform: uppercase;
+        }
+
+        .left-text span {
+          color: var(--red-main);
         }
 
         .right-side {
@@ -151,15 +148,20 @@ export default function LoginPage() {
 
         .form-container {
           width: 100%;
-          max-width: 360px;
+          max-width: 420px;
+          background: #ffffff;
+          border: 1px solid #a2a4a5;
+          border-radius: 8px;
+          padding: 2rem;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
         }
 
         .title {
-          color: #ffffff;
-          font-size: 2.25rem;
-          font-weight: 700;
-          margin-bottom: 32px;
-          letter-spacing: -0.03em;
+          color: var(--text-main);
+          font-size: 2rem;
+          font-weight: 800;
+          margin: 0 0 28px;
+          letter-spacing: 0;
         }
 
         .input-group {
@@ -172,37 +174,43 @@ export default function LoginPage() {
         .input-field {
           width: 100%;
           box-sizing: border-box;
-          background-color: #1a1a1c;
-          border: 1px solid #2a2a2c;
-          color: #ffffff;
-          border-radius: 12px;
-          padding: 16px 16px;
+          background-color: #f8fafc;
+          border: 1px solid #cbd5e1;
+          color: var(--text-main);
+          border-radius: 6px;
+          padding: 0.9rem 1rem;
           font-size: 0.95rem;
           outline: none;
-          transition: border-color 0.2s;
+          font-family: inherit;
+          font-weight: 600;
+          transition: border-color 0.2s, box-shadow 0.2s;
         }
 
         .input-field::placeholder {
-          color: #71717a;
+          color: var(--text-muted);
         }
 
         .input-field:focus {
-          border-color: #52525b;
+          border-color: transparent;
+          box-shadow: 0 0 0 2px var(--red-main);
         }
 
         .btn-primary {
           width: 100%;
-          background-color: #ffffff;
-          color: #000000;
+          background-color: var(--red-main);
+          color: #ffffff;
           border: none;
-          border-radius: 12px;
-          padding: 16px;
+          border-radius: 6px;
+          padding: 0.95rem;
           font-size: 0.8rem;
-          font-weight: 600;
+          font-weight: 800;
           cursor: pointer;
           transition: opacity 0.2s;
           display: flex;
           justify-content: center;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          font-family: inherit;
         }
 
         .btn-primary:hover {
@@ -218,15 +226,18 @@ export default function LoginPage() {
           display: flex;
           align-items: center;
           text-align: center;
-          color: #71717a;
+          color: var(--text-muted);
           font-size: 0.85rem;
           margin: 24px 0;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
         }
 
         .divider::before, .divider::after {
           content: '';
           flex: 1;
-          border-bottom: 1px solid #2a2a2c;
+          border-bottom: 1px solid #cbd5e1;
         }
 
         .divider:not(:empty)::before {
@@ -239,24 +250,27 @@ export default function LoginPage() {
 
         .btn-guest {
           width: 100%;
-          background-color: #1a1a1c;
-          color: #ffffff;
-          border: 1px solid #2a2a2c;
-          border-radius: 12px;
-          padding: 16px;
-          font-size: 0.95rem;
-          font-weight: 600;
+          background-color: transparent;
+          color: var(--text-muted);
+          border: 1px solid #5c5c5c;
+          border-radius: 6px;
+          padding: 0.95rem;
+          font-size: 0.8rem;
+          font-weight: 800;
           cursor: pointer;
-          letter-spacing: -0.04em;
-          transition: background-color 0.2s;
+          letter-spacing: 0.05em;
+          transition: background-color 0.2s, color 0.2s;
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 8px;
+          text-transform: uppercase;
+          font-family: inherit;
         }
 
         .btn-guest:hover {
-          background-color: #27272a;
+          background-color: #f1f5f9;
+          color: var(--text-main);
         }
 
         .links-container {
@@ -266,14 +280,15 @@ export default function LoginPage() {
           align-items: center;
           gap: 12px;
           font-size: 0.85rem;
-          color: #a1a1aa;
+          color: var(--text-muted);
+          font-weight: 600;
         }
 
         .link {
-          color: #818cf8;
+          color: var(--red-main);
           cursor: pointer;
           text-decoration: none;
-          font-weight: 500;
+          font-weight: 800;
         }
         
         .link:hover {
@@ -281,11 +296,24 @@ export default function LoginPage() {
         }
 
         .error-message {
-          color: #f87171;
+          color: var(--red-main);
+          background: #fee2e2;
           font-size: 0.9rem;
-          margin-top: -12px;
+          padding: 0.85rem;
+          border-radius: 6px;
           margin-bottom: 16px;
           text-align: center;
+          font-weight: 700;
+        }
+
+        @media (max-width: 767px) {
+          .right-side {
+            padding: 24px 16px;
+          }
+
+          .form-container {
+            padding: 1.5rem;
+          }
         }
       `}</style>
       <div className="login-page-container">
@@ -293,14 +321,17 @@ export default function LoginPage() {
           <div className="pattern-overlay"></div>
           <div className="brand-logo">
             <div className="brand-icon">
-              <div className="brand-icon-inner">
-                <div></div><div></div><div></div><div></div>
-              </div>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="4" x2="12" y2="20"></line>
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <line x1="6.34" y1="6.34" x2="17.66" y2="17.66"></line>
+                <line x1="6.34" y1="17.66" x2="17.66" y2="6.34"></line>
+              </svg>
             </div>
-            Crisis Response
+            Emergency Core
           </div>
           <div className="left-text">
-            Intelligent<br />emergency & AI
+            Rapid<br /><span>Crisis</span><br />Response
           </div>
         </div>
 

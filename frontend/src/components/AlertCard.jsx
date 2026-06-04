@@ -32,11 +32,11 @@ function getBriefPayload(brief) {
   return { summary: brief.summary || "No summary available.", actions };
 }
 
-function AlertCard({ alert, onAcknowledge, isAcknowledgePending }) {
+function AlertCard({ alert, onAcknowledge, isAcknowledgePending, isEntering = false }) {
   const brief = getBriefPayload(alert.gemini_brief);
 
   return (
-    <article className="alert-card">
+    <article className={`alert-card ${isEntering ? "alert-card-enter" : ""}`}>
       <div className="card-top-row">
         <span className={`category-label type-${alert.type}`}>
           {TYPE_LABELS[alert.type] || "Incident"}
