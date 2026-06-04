@@ -1,5 +1,6 @@
 # Python
 backend/.venv/
+backend/venv/
 backend/__pycache__/
 backend/**/*.pyc
 
@@ -13,5 +14,6 @@ frontend/node_modules/
 # macOS
 .DS_Store
 
-
-rapid-crisis-management-firebase-adminsdk-fbsvc-57046a2aa3.json
+# Firebase service account keys (never commit these)
+*firebase-adminsdk*.json
+*.json.key
