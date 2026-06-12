@@ -35,7 +35,7 @@ const ROLE_ALERT_TYPES = {
   medical: new Set(["medical"]),
   medicine: new Set(["medical"]),
   security: new Set(["security"]),
-  general: new Set(["distress"]),
+  general: new Set(["medical", "security", "distress"]),
 };
 
 const ALERT_ENTER_ANIMATION_MS = 520;
@@ -254,16 +254,29 @@ function App() {
       return;
     }
 
+    // Keep the audio context unlocked: re-resume on every interaction (not once),
+    // and when the tab becomes visible again — browsers suspend it on blur/idle,
+    // and resume() is only honored close to a user gesture.
     const handleAudioUnlock = () => {
       unlockAlertAudio();
     };
 
-    window.addEventListener("pointerdown", handleAudioUnlock, { once: true });
-    window.addEventListener("keydown", handleAudioUnlock, { once: true });
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        unlockAlertAudio();
+      }
+    };
+
+    window.addEventListener("pointerdown", handleAudioUnlock);
+    window.addEventListener("keydown", handleAudioUnlock);
+    window.addEventListener("click", handleAudioUnlock);
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       window.removeEventListener("pointerdown", handleAudioUnlock);
       window.removeEventListener("keydown", handleAudioUnlock);
+      window.removeEventListener("click", handleAudioUnlock);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [user]);
 
@@ -333,10 +346,18 @@ function App() {
       setAlerts((current) => upsertAlert(current, normalizeAlert(incoming)));
     };
 
+    // On every (re)connect, resync the full list so nothing is missed while
+    // the socket was down or an event was dropped.
+    const handleReconnect = () => {
+      loadAlerts();
+    };
+
+    socket.on("connect", handleReconnect);
     socket.on("new_alert", handleNewAlert);
     socket.on("alert_updated", handleAlertUpdated);
 
     return () => {
+      socket.off("connect", handleReconnect);
       socket.off("new_alert", handleNewAlert);
       socket.off("alert_updated", handleAlertUpdated);
       socket.disconnect();
@@ -347,7 +368,7 @@ function App() {
         window.clearTimeout(notificationExitTimerRef.current);
       }
     };
-  }, [user, role, department]);
+  }, [user, role, department, loadAlerts]);
 
   const handleNotificationBellClick = useCallback(() => {
     unlockAlertAudio();
@@ -412,7 +433,10 @@ function App() {
   );
 
   const activeAlerts = useMemo(
-    () => visibleAlerts,
+    () =>
+      visibleAlerts.filter(
+        (alert) => alert.status === "active" || alert.status === "responding",
+      ),
     [visibleAlerts],
   );
 

@@ -29,6 +29,18 @@ export default function GuestTrigger() {
   const [isDragging, setIsDragging] = useState(false);
   const startXRef = useRef(0);
 
+  const [isRecording, setIsRecording] = useState(false);
+  const [guestDescription, setGuestDescription] = useState(null);
+  const [interimTranscript, setInterimTranscript] = useState('');
+  const recognitionRef = useRef(null);
+  const finalTranscriptRef = useRef('');   // committed final text across listen sessions
+  const sessionFinalRef = useRef('');      // finalized text within the current session
+  const keepListeningRef = useRef(false);  // true while the guest wants to keep recording
+
+  const SpeechRecognitionAPI =
+    typeof window !== 'undefined' &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition);
+
   const SWIPE_KNOB_WIDTH = 130;
 
   useEffect(() => {
@@ -38,10 +50,125 @@ export default function GuestTrigger() {
         setRoom('');
         setSelectedAlert(ALERT_TYPES[0]);
         setDragX(0);
+        setGuestDescription(null);
+        setInterimTranscript('');
+        setIsRecording(false);
+        keepListeningRef.current = false;
+        finalTranscriptRef.current = '';
+        sessionFinalRef.current = '';
       }, 4000);
       return () => clearTimeout(timer);
     }
   }, [success]);
+
+  useEffect(() => {
+    return () => {
+      keepListeningRef.current = false;
+      const recognition = recognitionRef.current;
+      if (recognition) {
+        try { recognition.stop(); } catch { /* no-op */ }
+      }
+    };
+  }, []);
+
+  const startRecording = () => {
+    finalTranscriptRef.current = '';
+    sessionFinalRef.current = '';
+    keepListeningRef.current = true;
+    setGuestDescription(null);
+    setInterimTranscript('');
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+      let interim = '';
+      let sessionFinal = '';
+      for (let i = 0; i < event.results.length; i += 1) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) sessionFinal += `${transcript} `;
+        else interim += transcript;
+      }
+      sessionFinalRef.current = sessionFinal.trim();
+
+      const committed = finalTranscriptRef.current;
+      const live = `${committed} ${sessionFinal} ${interim}`.replace(/\s+/g, ' ').trim();
+      setInterimTranscript(live);
+
+      const finalSoFar = `${committed} ${sessionFinal}`.replace(/\s+/g, ' ').trim();
+      if (finalSoFar) setGuestDescription(finalSoFar);
+    };
+
+    recognition.onerror = (event) => {
+      // Hard failures: stop and (if nothing captured) leave guest_description null.
+      const fatal =
+        event.error === 'not-allowed' ||
+        event.error === 'service-not-allowed' ||
+        event.error === 'audio-capture' ||
+        event.error === 'network';
+      if (fatal) {
+        keepListeningRef.current = false;
+        if (!finalTranscriptRef.current && !sessionFinalRef.current) {
+          setGuestDescription(null);
+        }
+      }
+      // Non-fatal (e.g. no-speech, aborted): let onend keep listening.
+    };
+
+    recognition.onend = () => {
+      // Commit whatever finalized this session before deciding what to do next.
+      if (sessionFinalRef.current) {
+        finalTranscriptRef.current = `${finalTranscriptRef.current} ${sessionFinalRef.current}`
+          .replace(/\s+/g, ' ')
+          .trim();
+        sessionFinalRef.current = '';
+      }
+
+      // Keep listening across natural pauses until the guest taps stop.
+      if (keepListeningRef.current) {
+        try {
+          recognition.start();
+          return;
+        } catch {
+          // fall through to finalize
+        }
+      }
+
+      recognitionRef.current = null;
+      setIsRecording(false);
+      setInterimTranscript(finalTranscriptRef.current);
+      setGuestDescription(finalTranscriptRef.current || null);
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setIsRecording(true);
+    } catch {
+      keepListeningRef.current = false;
+      setGuestDescription(null);
+      setIsRecording(false);
+    }
+  };
+
+  const toggleRecording = () => {
+    if (loading) return;
+    if (!SpeechRecognitionAPI) {
+      setGuestDescription(null);
+      return;
+    }
+    if (isRecording) {
+      keepListeningRef.current = false;
+      const recognition = recognitionRef.current;
+      if (recognition) {
+        try { recognition.stop(); } catch { /* no-op */ }
+      }
+    } else {
+      startRecording();
+    }
+  };
 
   const onPointerDown = (e) => {
     if (loading) return;
@@ -91,7 +218,8 @@ export default function GuestTrigger() {
         type: selectedAlert.id,
         room: room.trim(),
         device_name: 'guest_web',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        guest_description: guestDescription
       });
       setSuccess(true);
     } catch (err) {
@@ -179,6 +307,50 @@ export default function GuestTrigger() {
               </button>
             )
           })}
+        </div>
+
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '20px 0 32px 0' }}>
+          <p style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0f172a', letterSpacing: '0.04em', margin: '0 0 16px 0' }}>DESCRIBE EMERGENCY (OPTIONAL)</p>
+          <button
+            type="button"
+            onClick={toggleRecording}
+            aria-label="Describe emergency by voice"
+            className={isRecording ? 'mic-recording' : undefined}
+            style={{
+              width: '72px',
+              height: '72px',
+              borderRadius: '50%',
+              border: 'none',
+              background: isRecording ? '#CC0000' : '#ffffff',
+              color: isRecording ? '#ffffff' : '#27272a',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: isRecording ? 'none' : '0 4px 10px rgba(0,0,0,0.05)',
+              transition: 'all 0.2s ease',
+              padding: 0
+            }}
+          >
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z" /></svg>
+          </button>
+          {(isRecording || guestDescription) && (
+            <div
+              style={{
+                width: '100%',
+                borderBottom: '2px solid #94a3b8',
+                padding: '8px 0',
+                marginTop: '20px',
+                fontSize: '1rem',
+                fontWeight: 700,
+                color: '#0f172a',
+                minHeight: '36px',
+                textAlign: 'center'
+              }}
+            >
+              {isRecording ? interimTranscript : (guestDescription || '')}
+            </div>
+          )}
         </div>
 
         <div style={{ textAlign: 'center', width: '100%', marginBottom: '48px' }}>

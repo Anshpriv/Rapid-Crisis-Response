@@ -110,6 +110,12 @@ class GeminiService:
             f"Device: {alert.get('device_name')}\n"
             f"Timestamp: {alert.get('timestamp')}\n"
             f"Status: {alert.get('status')}"
+            + (
+                f"\nGuest description (may be any language — translate to English "
+                f"and use as primary context for the brief): {alert.get('guest_description')}\n"
+                if alert.get('guest_description')
+                else ""
+            )
         )
 
         try:

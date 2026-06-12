@@ -30,3 +30,25 @@ body {
   margin: 0;
   background-color: var(--bg-main);
 }
+
+@keyframes mic-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(204, 0, 0, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 16px rgba(204, 0, 0, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(204, 0, 0, 0);
+  }
+}
+
+.mic-recording {
+  animation: mic-pulse 1.5s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mic-recording {
+    animation: none;
+  }
+}

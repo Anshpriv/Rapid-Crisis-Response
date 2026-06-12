@@ -55,8 +55,8 @@ async def health() -> dict[str, str]:
 
 
 ALERT_DEPARTMENT_MAP: dict[str, set[str]] = {
-    "medical": {"medical", "medicine", "manager"},
-    "security": {"security", "manager"},
+    "medical": {"medical", "medicine", "manager", "general"},
+    "security": {"security", "manager", "general"},
     "distress": {"general", "manager"},
     "fire": {"manager"},
 }
@@ -154,6 +154,7 @@ async def create_alert(payload: AlertCreateRequest):
         "gemini_brief": None,
         "acknowledged_by": None,
         "acknowledged_at": None,
+        "guest_description": payload.guest_description,
     }
 
     try:
@@ -161,19 +162,17 @@ async def create_alert(payload: AlertCreateRequest):
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    target_rooms = ALERT_DEPARTMENT_MAP.get(created["type"], {"manager"})
-    for room in target_rooms:
-        await sio.emit("new_alert", created, room=room)
+    # Broadcast to all connected dashboards; each client role-filters what it displays.
+    await sio.emit("new_alert", created)
 
     async def process_alert_background(incident):
         try:
             brief = gemini_service.generate_alert_brief(incident)
             with_brief = update_incident(incident["id"], {"gemini_brief": brief})
             final_incident = with_brief or incident
-            
-            for r in target_rooms:
-                await sio.emit("alert_updated", final_incident, room=r)
-            
+
+            await sio.emit("alert_updated", final_incident)
+
             await notify_staff_for_incident(final_incident)
         except Exception as e:
             print(f"Error in background alert processing: {e}")
@@ -221,9 +220,7 @@ async def patch_alert(alert_id: str, patch: AlertUpdateRequest):
     if updated is None:
         raise HTTPException(status_code=404, detail="Alert not found.")
 
-    target_rooms = ALERT_DEPARTMENT_MAP.get(updated.get("type"), {"manager"})
-    for room in target_rooms:
-        await sio.emit("alert_updated", updated, room=room)
+    await sio.emit("alert_updated", updated)
     return updated
 
 

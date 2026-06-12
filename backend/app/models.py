@@ -25,6 +25,7 @@ class AlertCreateRequest(BaseModel):
     room: str = Field(min_length=1, max_length=10)
     device_name: str = Field(min_length=1, max_length=120)
     timestamp: datetime
+    guest_description: str | None = None
 
     @field_validator("room")
     @classmethod

@@ -1,6 +1,7 @@
 import { io } from "socket.io-client";
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:8000";
+// Empty/undefined => connect to the same origin, which Vite proxies to the backend.
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || undefined;
 
 export const socket = io(SOCKET_URL, {
   autoConnect: false,
