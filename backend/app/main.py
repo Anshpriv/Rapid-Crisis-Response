@@ -46,7 +46,7 @@ async def disconnect(sid: str):
 
 @api.get("/")
 async def root() -> dict[str, str]:
-    return {"message": "Rapid Crisis Response backend online"}
+    return {"message": "Rapid Crisis Response backend online v2"}
 
 
 @api.get("/api/health")
