@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 import { getToken } from "firebase/messaging";
@@ -16,6 +16,8 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState(null);
   const [department, setDepartment] = useState(null);
   const [loading, setLoading] = useState(true);
+  const heartbeatRef = useRef(null);
+  const prevUidRef = useRef(null);
 
   useEffect(() => {
     if (!user) {
@@ -30,12 +32,13 @@ export function AuthProvider({ children }) {
       try {
         if (!messaging) return;
         const fcmToken = await getToken(messaging, { vapidKey: VAPID_KEY });
-        const rolePayload = role || "general";
-        const departmentPayload = department || role || "general";
+        const rolePayload = role || "distress";
+        const departmentPayload = department || role || "distress";
         await api.post("/api/register-device", {
           role: rolePayload,
           department: departmentPayload,
           fcm_token: fcmToken,
+          uid: user.uid,
         });
       } catch (error) {
         console.warn("FCM registration skipped:", error);
@@ -70,7 +73,37 @@ export function AuthProvider({ children }) {
               setRole(fetchedRole);
               setDepartment(fetchedDepartment);
               setUser(firebaseUser);
+
+              prevUidRef.current = firebaseUser.uid;
+              await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/availability`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid: firebaseUser.uid, is_available: true })
+              }).catch(() => {});
+
+              clearInterval(heartbeatRef.current);
+              heartbeatRef.current = setInterval(async () => {
+                await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/heartbeat`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ uid: firebaseUser.uid })
+                }).catch(() => {});
+              }, 60000);
             } else {
+              const prevUid = prevUidRef.current;
+              prevUidRef.current = null;
+
+              clearInterval(heartbeatRef.current);
+              heartbeatRef.current = null;
+
+              if (prevUid) {
+                await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/availability`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ uid: prevUid, is_available: false })
+                }).catch(() => {});
+              }
+
               setUser(null);
               setRole(null);
               setDepartment(null);
@@ -98,7 +131,11 @@ export function AuthProvider({ children }) {
       setLoading(false);
     }
 
-    return unsubscribe;
+    return () => {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+      unsubscribe();
+    };
   }, []);
 
   const logout = () => signOut(auth);

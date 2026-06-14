@@ -19,7 +19,7 @@ const ALERT_TYPES = [
 export default function GuestTrigger() {
   const navigate = useNavigate();
   const [room, setRoom] = useState('');
-  const [selectedAlert, setSelectedAlert] = useState(ALERT_TYPES[0]);
+  const [selectedAlert, setSelectedAlert] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
@@ -31,7 +31,7 @@ export default function GuestTrigger() {
 
   const [isRecording, setIsRecording] = useState(false);
   const [guestDescription, setGuestDescription] = useState(null);
-  const [interimTranscript, setInterimTranscript] = useState('');
+  const [, setInterimTranscript] = useState('');
   const recognitionRef = useRef(null);
   const finalTranscriptRef = useRef('');   // committed final text across listen sessions
   const sessionFinalRef = useRef('');      // finalized text within the current session
@@ -48,7 +48,7 @@ export default function GuestTrigger() {
       const timer = setTimeout(() => {
         setSuccess(false);
         setRoom('');
-        setSelectedAlert(ALERT_TYPES[0]);
+        setSelectedAlert(null);
         setDragX(0);
         setGuestDescription(null);
         setInterimTranscript('');
@@ -210,12 +210,19 @@ export default function GuestTrigger() {
       setDragX(0);
       return;
     }
+    // Allow submission if EITHER a type is selected (Mode A) OR a description
+    // was captured (Mode B). Block only when neither is present.
+    if (!selectedAlert && !guestDescription) {
+      setError('SELECT A TYPE OR DESCRIBE THE EMERGENCY');
+      setDragX(0);
+      return;
+    }
     setLoading(true);
     setError(null);
 
     try {
       await api.post('/api/alert', {
-        type: selectedAlert.id,
+        type: selectedAlert ? selectedAlert.id : null,
         room: room.trim(),
         device_name: 'guest_web',
         timestamp: new Date().toISOString(),
@@ -287,7 +294,7 @@ export default function GuestTrigger() {
             return (
               <button
                 key={alert.id}
-                onClick={() => setSelectedAlert(alert)}
+                onClick={() => setSelectedAlert(prev => (prev?.id === alert.id ? null : alert))}
                 style={{
                   aspectRatio: '1 / 1',
                   borderRadius: '50%',
@@ -310,47 +317,80 @@ export default function GuestTrigger() {
         </div>
 
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '20px 0 32px 0' }}>
-          <p style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0f172a', letterSpacing: '0.04em', margin: '0 0 16px 0' }}>DESCRIBE EMERGENCY (OPTIONAL)</p>
+          <style>{`
+            @keyframes bar-pulse {
+              0%, 100% { height: 8px; }
+              50% { height: 28px; }
+            }
+          `}</style>
           <button
             type="button"
             onClick={toggleRecording}
-            aria-label="Describe emergency by voice"
+            aria-label="Voice activate emergency description"
             className={isRecording ? 'mic-recording' : undefined}
             style={{
-              width: '72px',
-              height: '72px',
-              borderRadius: '50%',
-              border: 'none',
-              background: isRecording ? '#CC0000' : '#ffffff',
-              color: isRecording ? '#ffffff' : '#27272a',
-              cursor: loading ? 'not-allowed' : 'pointer',
+              width: '100%',
+              minHeight: '72px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: isRecording ? 'none' : '0 4px 10px rgba(0,0,0,0.05)',
-              transition: 'all 0.2s ease',
-              padding: 0
+              gap: '16px',
+              padding: '10px 18px',
+              background: '#eef1f5',
+              border: '1.5px solid #CC0000',
+              borderRadius: '16px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              boxSizing: 'border-box',
+              transition: 'all 0.2s ease'
             }}
           >
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z" /></svg>
-          </button>
-          {(isRecording || guestDescription) && (
-            <div
+            {/* Red circle with white mic icon (dimmed/pressed while listening) */}
+            <span
               style={{
-                width: '100%',
-                borderBottom: '2px solid #94a3b8',
-                padding: '8px 0',
-                marginTop: '20px',
-                fontSize: '1rem',
-                fontWeight: 700,
-                color: '#0f172a',
-                minHeight: '36px',
-                textAlign: 'center'
+                width: '52px',
+                height: '52px',
+                flexShrink: 0,
+                borderRadius: '50%',
+                background: '#CC0000',
+                opacity: isRecording ? 0.7 : 1,
+                transform: isRecording ? 'scale(0.96)' : 'scale(1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff',
+                transition: 'opacity 0.2s ease, transform 0.1s ease'
               }}
             >
-              {isRecording ? interimTranscript : (guestDescription || '')}
-            </div>
-          )}
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z" /></svg>
+            </span>
+
+            {/* Center text */}
+            <span style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+              <span style={{ fontSize: '1.25rem', fontWeight: 800, letterSpacing: '0.01em', color: '#0f172a', lineHeight: 1.1, textTransform: 'uppercase' }}>
+                Voice Activate
+              </span>
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.06em', marginTop: '3px', color: isRecording ? '#CC0000' : '#64748b' }}>
+                {isRecording ? 'LISTENING...' : 'READY TO LISTEN'}
+              </span>
+            </span>
+
+            {/* Animated waveform — only while listening */}
+            {isRecording && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px', height: '28px', flexShrink: 0, paddingRight: '2px' }}>
+                {[0, 0.15, 0.3, 0.45].map((delay, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      width: '3px',
+                      height: '8px',
+                      borderRadius: '2px',
+                      background: '#CC0000',
+                      animation: `bar-pulse 0.8s ease-in-out ${delay}s infinite`
+                    }}
+                  />
+                ))}
+              </span>
+            )}
+          </button>
         </div>
 
         <div style={{ textAlign: 'center', width: '100%', marginBottom: '48px' }}>

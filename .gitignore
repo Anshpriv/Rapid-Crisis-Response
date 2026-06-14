@@ -5,6 +5,7 @@ backend/__pycache__/
 backend/**/*.pyc
 
 # Environment files
+.env
 backend/.env
 frontend/.env
 
@@ -16,4 +17,6 @@ frontend/node_modules/
 
 # Firebase service account keys (never commit these)
 *firebase-adminsdk*.json
+serviceAccountKey.json
+*serviceAccount*.json
 *.json.key

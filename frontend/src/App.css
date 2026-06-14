@@ -589,6 +589,24 @@
   border-radius: 999px;
 }
 
+.category-label-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.secondary-tag {
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  opacity: 0.85;
+  border: 1px dashed rgba(255, 255, 255, 0.55);
+}
+
 .type-medical {
   background: var(--red-main);
   color: #fff;
@@ -1154,4 +1172,252 @@
   .stats-bar {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* --- Unresolved live countdown (counts up, appears after 180s) --- */
+.unresolved-countdown {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 0.4rem;
+  background: #fee2e2;
+  color: var(--red-main);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
+  animation: sos-pulse 1.4s ease-in-out infinite;
+}
+
+/* --- Authority notified banner (yellow SMS-dispatched card) --- */
+.authority-sms-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fefce8;
+  border: 1px solid #fde047;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 10px 0;
+  color: #854d0e;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.authority-sms-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.authority-sms-text {
+  flex: 1;
+  text-align: center;
+}
+
+/* --- Per-card SOS button (staff assigned only) --- */
+.btn-sos {
+  width: 100%;
+  background: var(--red-main);
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.85rem 1rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.btn-sos:hover {
+  background: #b91c1c;
+}
+
+.btn-sos:active {
+  transform: scale(0.98);
+}
+
+/* --- SOS mock modal --- */
+.sos-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1.25rem;
+}
+
+.sos-modal {
+  background: #0f172a;
+  color: #e2e8f0;
+  width: 100%;
+  max-width: 420px;
+  border-radius: 12px;
+  padding: 1.75rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  border: 1px solid #1e293b;
+  text-align: center;
+}
+
+.sos-header {
+  margin: 0 0 0.85rem 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #f8fafc;
+}
+
+.sos-header.sos-success {
+  color: #4ade80;
+}
+
+.sos-body {
+  margin: 0 0 1.25rem 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+
+.sos-progress {
+  width: 100%;
+  height: 8px;
+  background: #1e293b;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.sos-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--red-main);
+  border-radius: 999px;
+  animation: sos-fill 3s linear forwards;
+}
+
+.sos-close {
+  margin-top: 0.5rem;
+  background: #1e293b;
+  color: #f8fafc;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.7rem 1.5rem;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.sos-close:hover {
+  background: #334155;
+}
+
+@keyframes sos-fill {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+@keyframes sos-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* --- 3-phase escalation timer (staff -> manager -> authority) --- */
+.phase-timer {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.phase-staff { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+.phase-manager { background: #fff7ed; color: #c2410e; border: 1px solid #fed7aa; }
+
+/* Non-manager view of the manager escalation window */
+.phase-escalated {
+  background: #fff7ed;
+  color: #c2410e;
+  border: 1px solid #fed7aa;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-align: center;
+  margin: 8px 0;
+}
+
+/* Authority-contact pending state (blends with the yellow SMS card) */
+.phase-authority-pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fefce8;
+  border: 1px solid #fde04788;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 8px 0;
+  color: #92400e;
+  font-size: 0.82rem;
+  font-weight: 600;
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phase-authority-pending { animation: none; }
+}
+
+.phase-label { margin-bottom: 6px; }
+.phase-countdown { font-size: 1rem; margin-bottom: 6px; }
+
+.phase-bar { height: 4px; background: #f1e7d4; border-radius: 9999px; overflow: hidden; }
+.phase-bar-fill { height: 100%; border-radius: 9999px; transition: width 1s linear; }
+.staff-fill { background: #f59e0b; }
+.manager-fill { background: #ea580c; }
+
+/* Resolve/responding actions inside the SOS dispatched modal */
+.sos-modal .card-actions { margin: 1rem 0 0.25rem; }
+
+/* --- Incident log escalation timeline --- */
+.escalation-log {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.escalation-log li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 0.8rem;
+}
+
+.escalation-log-time {
+  flex-shrink: 0;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+}
+
+.escalation-log-label {
+  color: #334155;
+  font-weight: 600;
 }

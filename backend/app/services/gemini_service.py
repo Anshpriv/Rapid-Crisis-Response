@@ -59,12 +59,22 @@ class GeminiService:
         alert_type = str(alert.get("type", "distress"))
         room = alert.get("room", "unknown room")
         device_name = alert.get("device_name", "unknown device")
+        guest_description = (alert.get("guest_description") or "").strip()
 
-        summary = (
-            f"A {alert_type} alert was triggered in room {room} by device {device_name}. "
-            "Treat this as a live incident and coordinate response resources immediately. "
-            "Stabilize the area while maintaining guest safety and clear communication."
-        )
+        # When Gemini is unavailable (e.g. rate-limited), still surface the
+        # guest's own words instead of generic boilerplate.
+        if guest_description:
+            summary = (
+                f"A {alert_type} alert was triggered in room {room}. "
+                f"Guest reported: \"{guest_description}\". "
+                "Treat this as a live incident and coordinate response resources immediately."
+            )
+        else:
+            summary = (
+                f"A {alert_type} alert was triggered in room {room} by device {device_name}. "
+                "Treat this as a live incident and coordinate response resources immediately. "
+                "Stabilize the area while maintaining guest safety and clear communication."
+            )
 
         return {
             "summary": summary,
@@ -125,6 +135,145 @@ class GeminiService:
         except Exception:  # pragma: no cover - external dependency
             return fallback
 
+    _VALID_TYPES = {"medical", "fire", "security", "distress"}
+
+    def _normalize_types(self, raw_primary: Any, raw_secondary: Any, incident: dict) -> tuple[str, list[str]]:
+        """Resolve a single primary type plus a clean list of secondary hazards."""
+        primary = str(raw_primary or "").strip().lower()
+        if primary not in self._VALID_TYPES:
+            existing = str(incident.get("type") or "").strip().lower()
+            primary = existing if existing in self._VALID_TYPES else "distress"
+
+        if not isinstance(raw_secondary, list):
+            raw_secondary = []
+
+        secondary: list[str] = []
+        for item in raw_secondary:
+            value = str(item).strip().lower()
+            if value in self._VALID_TYPES and value != primary and value not in secondary:
+                secondary.append(value)
+
+        return primary, secondary
+
+    def dispatch_incident(self, incident: dict, available_staff: list[dict]) -> dict:
+        fallback_assignments = [{"staff_uid": None, "name": "Manager",
+                                 "task": "No available staff — direct manager response required",
+                                 "priority": 1}]
+
+        if not self.enabled or not self._model:
+            primary, secondary = self._normalize_types(incident.get("type"), [], incident)
+            return {"primary_type": primary, "secondary_types": secondary, "assignments": fallback_assignments}
+
+        staff_context = "\n".join([
+            f"- {s.get('name','Unknown')} | qualifications: {s.get('qualifications',[])} | "
+            f"floor: {s.get('floor','unknown')} | uid: {s.get('uid')}"
+            for s in available_staff
+            if s.get('uid')
+        ]) or "No staff available"
+
+        prompt = (
+            "You are an emergency dispatch AI for a hospitality venue. "
+            "Classify the incident if type is null, then assign available staff optimally.\n"
+            "Rules:\n"
+            "- Match qualifications to incident type\n"
+            "- Choose ONE primary_type — the single most urgent/dominant hazard\n"
+            "- List any additional hazards in secondary_types (e.g. smoke + chest pain -> primary medical, secondary [fire])\n"
+            "- Assign specific actionable task per person\n"
+            "- Load balance: assign max 1 primary, 1-2 secondary\n"
+            "- If description implies multiple types, assign roles covering both primary and secondary hazards\n"
+            "- If secondary_types is non-empty, assign qualified staff for those hazard types too — "
+            "each as separate assignment entries with appropriate priority (P2 if primary hazard already covered)\n"
+            "- If no qualified staff, assign best available as general responder\n\n"
+            f"Incident type: {incident.get('type') or 'NOT SELECTED — classify from description'}\n"
+            f"Room: {incident.get('room')}\n"
+            f"Guest description: {incident.get('guest_description') or 'none provided'}\n\n"
+            f"Available staff:\n{staff_context}\n\n"
+            "Return ONLY valid JSON, no markdown:\n"
+            '{"primary_type":"medical|fire|security|distress",'
+            '"secondary_types":["fire"],'
+            '"summary":"2-3 sentence English brief",'
+            '"recommended_actions":["a1","a2","a3"],'
+            '"assignments":[{"staff_uid":"uid","name":"name","task":"specific task","priority":1}],'
+            '"load_balance_note":"brief note on exclusions"}'
+        )
+
+        try:
+            response = self._model.generate_content(prompt)
+            result = self._extract_json_object(getattr(response, "text", "") or "")
+            primary, secondary = self._normalize_types(
+                result.get("primary_type") or result.get("classified_type"),
+                result.get("secondary_types"),
+                incident,
+            )
+            result["primary_type"] = primary
+            result["secondary_types"] = secondary
+            if not result.get("assignments"):
+                result["assignments"] = fallback_assignments
+            return result
+        except Exception:
+            primary, secondary = self._normalize_types(incident.get("type"), [], incident)
+            return {
+                "primary_type": primary,
+                "secondary_types": secondary,
+                "summary": self._fallback_alert_brief(incident)["summary"],
+                "recommended_actions": self._fallback_actions(primary),
+                "assignments": fallback_assignments
+            }
+
+    def _fallback_classify_brief(self, alert: dict[str, Any]) -> dict[str, Any]:
+        brief = self._fallback_alert_brief({**alert, "type": "distress"})
+        return {
+            "classified_type": "distress",
+            "summary": brief["summary"],
+            "recommended_actions": brief["recommended_actions"],
+        }
+
+    def classify_and_brief(self, alert: dict[str, Any]) -> dict[str, Any]:
+        fallback = self._fallback_classify_brief(alert)
+        if not self.enabled or self._model is None:
+            return fallback
+
+        prompt = (
+            "You are an emergency classifier for a hospitality venue. \n"
+            "A guest triggered an emergency without selecting a type.\n"
+            "Based only on their description, do two things:\n"
+            "1. Classify as exactly one of: medical, fire, security, distress\n"
+            "2. Generate a situation brief and 3 recommended actions\n\n"
+            "Guest description (may be any language — translate to English): \n"
+            f"{alert.get('guest_description')}\n\n"
+            "Return ONLY valid JSON, no markdown:\n"
+            "{\n"
+            '  "classified_type": "medical|fire|security|distress",\n'
+            '  "summary": "2-3 sentence English brief",\n'
+            '  "recommended_actions": ["action1", "action2", "action3"]\n'
+            "}"
+        )
+
+        try:
+            response = self._model.generate_content(prompt)
+            candidate = self._extract_json_object(getattr(response, "text", "") or "")
+
+            classified_type = str(candidate.get("classified_type", "")).strip().lower()
+            if classified_type not in {"medical", "fire", "security", "distress"}:
+                classified_type = "distress"
+
+            summary = str(candidate.get("summary", "")).strip() or fallback["summary"]
+
+            actions = candidate.get("recommended_actions", [])
+            if not isinstance(actions, list):
+                actions = []
+            cleaned_actions = [str(action).strip() for action in actions if str(action).strip()]
+            if len(cleaned_actions) < 3:
+                cleaned_actions.extend(self._fallback_actions(classified_type))
+
+            return {
+                "classified_type": classified_type,
+                "summary": summary,
+                "recommended_actions": cleaned_actions[:3],
+            }
+        except Exception:  # pragma: no cover - external dependency
+            return fallback
+
     @staticmethod
     def _fallback_escalation_message(incident: dict) -> str:
         alert_type = str(incident.get("type", "distress")).upper()
@@ -151,6 +300,42 @@ class GeminiService:
             f"Time of alert: {incident.get('timestamp')}"
         )
 
+        try:
+            response = self._model.generate_content(prompt)
+            text = (getattr(response, "text", "") or "").strip()
+            return text if text else fallback
+        except Exception:
+            return fallback
+
+    def generate_authority_brief(self, incident: dict) -> str:
+        authority_map = {
+            "fire": "Fire Department",
+            "security": "Security Department",
+            "distress": "Emergency Services",
+            "medical": "Medical Department",
+        }
+        primary = incident.get("type", "distress")
+        authority = authority_map.get(primary, "Emergency Services")
+        room = incident.get("room", "unknown")
+
+        fallback = (
+            f"EMERGENCY ALERT — {primary.upper()} incident in Room {room}. "
+            f"No staff response for 5 minutes. Immediate {authority} response required."
+        )
+
+        if not self.enabled or not self._model:
+            return fallback
+
+        prompt = (
+            f"You are an emergency dispatch system at a hospitality venue. "
+            f"Generate a concise emergency SMS to send to {authority}. "
+            f"Plain text only, 2-3 sentences max, no markdown.\n"
+            f"Incident type: {primary}\n"
+            f"Secondary hazards: {incident.get('secondary_types', [])}\n"
+            f"Room: {room}\n"
+            f"Guest description: {incident.get('guest_description', 'none')}\n"
+            f"Time unresolved: 5 minutes"
+        )
         try:
             response = self._model.generate_content(prompt)
             text = (getattr(response, "text", "") or "").strip()
@@ -245,15 +430,29 @@ class GeminiService:
             for incident in incidents[:150]
         ]
 
+        # Pre-compute exact counts in Python so Gemini cannot miscount. The type
+        # breakdown is by PRIMARY type only — secondary_types are not double-counted.
+        type_counts = Counter(incident.get("type") for incident in incidents)
+        status_counts = Counter(incident.get("status") for incident in incidents)
+
         prompt = (
-            "Analyze the last 30 days of hospitality emergency incidents and return only JSON "
-            "with this exact schema: "
-            '{"headline":"short title",'
-            '"analysis":"short paragraph",'
-            '"high_risk_patterns":["pattern 1","pattern 2"],'
-            '"recommendations":["recommendation 1","recommendation 2","recommendation 3"]}. '\
-            "Focus on actionable operational patterns and response improvements.\n"
-            f"Incident dataset: {json.dumps(reduced_incidents)}"
+            "You are a hospitality safety analyst. Analyze this incident dataset and produce "
+            "a specific, data-driven risk report. Do NOT use generic statements. "
+            "Reference actual numbers, specific alert types, and patterns you see in the data.\n"
+            "Use the EXACT counts provided below for all numbers in your report. "
+            "Do not recalculate or estimate counts from the dataset.\n"
+            "Rules:\n"
+            "- headline must reference the dominant type AND exact count\n"
+            "- if two types are tied, call that out explicitly\n"
+            "- analysis must reference specific rooms or devices if repeated\n"
+            "- high_risk_patterns must list each type with count and % of total\n"
+            "- recommendations must be specific to the patterns found, not generic\n"
+            f"Total incidents: {len(incidents)}\n"
+            f"Incident type breakdown (exact counts, primary type only): {dict(type_counts)}\n"
+            f"Status breakdown (exact counts): {dict(status_counts)}\n"
+            f"Full dataset (for pattern analysis only): {json.dumps(reduced_incidents)}\n\n"
+            "Return ONLY valid JSON:\n"
+            '{"headline":"...","analysis":"...","high_risk_patterns":["..."],"recommendations":["..."]}'
         )
 
         try:
