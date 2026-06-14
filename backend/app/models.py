@@ -21,7 +21,7 @@ class AlertStatus(str, Enum):
 
 
 class AlertCreateRequest(BaseModel):
-    type: AlertType
+    type: AlertType | None = None
     room: str = Field(min_length=1, max_length=10)
     device_name: str = Field(min_length=1, max_length=120)
     timestamp: datetime
@@ -42,6 +42,7 @@ class AlertUpdateRequest(BaseModel):
 
 
 class RegisterDeviceRequest(BaseModel):
-    role: Literal["medical", "security", "manager", "general"]
+    role: Literal["medical", "security", "fire", "distress", "manager", "general"]
     department: Optional[str] = None
     fcm_token: str
+    uid: Optional[str] = None

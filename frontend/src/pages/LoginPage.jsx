@@ -24,7 +24,7 @@ export default function LoginPage() {
       const { default: app } = await import('../firebase')
       const db = getFirestore(app)
       const userDoc = await getDoc(doc(db, 'users', credential.user.uid))
-      const role = userDoc.exists() ? userDoc.data().role || 'general' : 'general'
+      const role = userDoc.exists() ? userDoc.data().role || 'distress' : 'distress'
 
       try {
         const permission = await Notification.requestPermission()

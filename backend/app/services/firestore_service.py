@@ -84,11 +84,21 @@ def create_incident(payload: dict[str, Any]) -> dict[str, Any]:
 
 def list_incidents(status: str | None = None, limit: int = 250) -> list[dict[str, Any]]:
     try:
-        query = _collection().order_by("timestamp", direction=firestore.Query.DESCENDING)
         if status:
-            query = query.where("status", "==", status)
+            # Equality filter only (single-field auto index) — combining where()
+            # with order_by() on a different field would require a composite
+            # index, so we sort newest-first in Python instead.
+            snapshots = _collection().where("status", "==", status).stream()
+            results = [_serialize_snapshot(snapshot) for snapshot in snapshots]
+            results.sort(key=lambda r: r.get("timestamp") or "", reverse=True)
+            return results[:limit]
 
-        snapshots = query.limit(limit).stream()
+        snapshots = (
+            _collection()
+            .order_by("timestamp", direction=firestore.Query.DESCENDING)
+            .limit(limit)
+            .stream()
+        )
         return [_serialize_snapshot(snapshot) for snapshot in snapshots]
     except Exception as exc:  # pragma: no cover - external dependency
         raise RuntimeError("Failed to load incidents from Firestore.") from exc
@@ -112,6 +122,17 @@ def update_incident(incident_id: str, updates: dict[str, Any]) -> dict[str, Any]
         raise RuntimeError("Failed to update incident in Firestore.") from exc
 
 
+def append_incident_event(incident_id: str, label: str) -> None:
+    """Append a timeline event to the incident's escalation_log (for the dashboard log)."""
+    try:
+        entry = {"label": label, "at": datetime.now(timezone.utc).isoformat()}
+        _collection().document(incident_id).update(
+            {"escalation_log": firestore.ArrayUnion([entry])}
+        )
+    except Exception as exc:  # pragma: no cover - external dependency
+        print(f"append_incident_event error: {exc}")
+
+
 def get_recent_incidents(days: int = 30, limit: int = 500) -> list[dict[str, Any]]:
     try:
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
@@ -127,14 +148,91 @@ def get_recent_incidents(days: int = 30, limit: int = 500) -> list[dict[str, Any
         raise RuntimeError("Failed to load recent incidents from Firestore.") from exc
 
 
-def register_device(role: str, fcm_token: str, department: str | None = None) -> dict:
+def register_device(
+    role: str,
+    fcm_token: str,
+    department: str | None = None,
+    staff_profile_id: str | None = None,
+) -> dict:
     db = _get_db()
-    doc_ref = db.collection("staff_devices").document()
     data = {
         "role": role,
         "department": department if department else role,
         "fcm_token": fcm_token,
         "registered_at": datetime.now(timezone.utc).isoformat(),
     }
+    if staff_profile_id:
+        data["staff_profile_id"] = staff_profile_id
+
+    # Idempotent: keep exactly one document per FCM token so a single physical
+    # device is never notified multiple times. Reuse the existing doc (merging so
+    # links like staff_profile_id survive) and prune any duplicate rows.
+    existing = list(
+        db.collection("staff_devices").where("fcm_token", "==", fcm_token).stream()
+    )
+    if existing:
+        primary = existing[0].reference
+        primary.set(data, merge=True)
+        for dup in existing[1:]:
+            dup.reference.delete()
+        return {"id": primary.id, **(primary.get().to_dict() or data)}
+
+    doc_ref = db.collection("staff_devices").document()
     doc_ref.set(data)
     return {"id": doc_ref.id, **data}
+
+
+def get_available_staff() -> list[dict]:
+    db = _get_db()
+    docs = db.collection("staff_profiles").where("is_available", "==", True).stream()
+    return [{"uid": d.id, **d.to_dict()} for d in docs]
+
+
+def assign_staff(uid: str, incident_id: str) -> None:
+    db = _get_db()
+    db.collection("staff_profiles").document(uid).update({
+        "is_available": False,
+        "current_incident_id": incident_id
+    })
+
+
+def release_staff(uid: str) -> None:
+    db = _get_db()
+    db.collection("staff_profiles").document(uid).update({
+        "is_available": True,
+        "current_incident_id": None
+    })
+
+
+def upsert_staff_availability(uid: str, is_available: bool) -> None:
+    db = _get_db()
+    db.collection("staff_profiles").document(uid).set(
+        {"is_available": is_available, "last_seen": datetime.now(timezone.utc).isoformat()},
+        merge=True
+    )
+
+
+def heartbeat(uid: str) -> None:
+    db = _get_db()
+    db.collection("staff_profiles").document(uid).update({
+        "last_seen": datetime.now(timezone.utc).isoformat()
+    })
+
+
+def mark_stale_staff_unavailable() -> None:
+    db = _get_db()
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=3)).isoformat()
+    docs = db.collection("staff_profiles").where("is_available", "==", True).stream()
+    for doc in docs:
+        if doc.to_dict().get("last_seen", "") < cutoff:
+            doc.reference.update({"is_available": False})
+
+
+def release_staff_for_incident(incident_id: str) -> list[str]:
+    db = _get_db()
+    docs = db.collection("staff_profiles").where("current_incident_id", "==", incident_id).stream()
+    released: list[str] = []
+    for doc in docs:
+        doc.reference.update({"is_available": True, "current_incident_id": None})
+        released.append(doc.id)
+    return released

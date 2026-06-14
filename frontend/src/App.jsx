@@ -30,12 +30,15 @@ const TABS = [
   { key: "settings", label: "Settings", icon: Icons.Settings },
 ];
 
+// Four response roles each see their own incident type; manager is an
+// oversight role (null) that sees all four types.
 const ROLE_ALERT_TYPES = {
   manager: null,
   medical: new Set(["medical"]),
   medicine: new Set(["medical"]),
   security: new Set(["security"]),
-  general: new Set(["medical", "security", "distress"]),
+  fire: new Set(["fire"]),
+  distress: new Set(["distress"]),
 };
 
 const ALERT_ENTER_ANIMATION_MS = 520;
@@ -187,7 +190,7 @@ function normalizeRole(role) {
     return normalized;
   }
 
-  return "general";
+  return "distress";
 }
 
 function filterAlertsByRole(alerts, role) {
@@ -285,7 +288,7 @@ function App() {
       return;
     }
 
-    socket.auth = { department: department || role || "general" };
+    socket.auth = { department: department || role || "distress" };
     socket.connect();
 
     const handleNewAlert = (incoming) => {
@@ -435,7 +438,10 @@ function App() {
   const activeAlerts = useMemo(
     () =>
       visibleAlerts.filter(
-        (alert) => alert.status === "active" || alert.status === "responding",
+        (alert) =>
+          alert.status === "active" ||
+          alert.status === "responding" ||
+          alert.status === "resolved",
       ),
     [visibleAlerts],
   );
@@ -635,6 +641,8 @@ function App() {
                     onAcknowledge={handleAcknowledge}
                     isAcknowledgePending={pendingAckIds.has(alert.id)}
                     isEntering={enteringAlertIds.has(alert.id)}
+                    currentUid={user?.uid}
+                    userRole={role}
                   />
                 ))}
               </div>
@@ -673,6 +681,16 @@ function App() {
                     </div>
                     <div className="log-card-body">
                       <p><strong>Brief:</strong> {briefSummary(alert.gemini_brief)}</p>
+                      {Array.isArray(alert.escalation_log) && alert.escalation_log.length > 0 && (
+                        <ul className="escalation-log">
+                          {alert.escalation_log.map((ev, i) => (
+                            <li key={i}>
+                              <span className="escalation-log-time">{formatLogTime(ev.at)}</span>
+                              <span className="escalation-log-label">{ev.label}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                     <div className="log-card-footer">
                       <span>Acknowledged by: <strong>{alert.acknowledged_by || "Pending"}</strong></span>
